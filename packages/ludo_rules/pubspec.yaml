@@ -1,0 +1,10 @@
+name: ludo_rules
+description: Pure-Dart deterministic Desi Kuti Ludo rule engine shared across offline, P2P, and server-synced clients.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dev_dependencies:
+  test: ^1.25.0

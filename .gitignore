@@ -1,0 +1,23 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+
+# Environment (only minimal .env allowed locally, never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Node / Admin Web
+node_modules/
+dist/
+.vite/
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
