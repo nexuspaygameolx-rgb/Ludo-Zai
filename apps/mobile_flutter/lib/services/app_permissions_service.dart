@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'background_keep_alive_service.dart';
 
 /// Automatically requests all required Android runtime permissions on app startup
-/// (Microphone, Nearby Wi-Fi Devices, Bluetooth Scan/Advertise/Connect, Location, Notifications)
-/// so the Codemagic-built APK works out-of-the-box for Offline P2P, Voice Chat & Alerts.
+/// (Microphone, Nearby Wi-Fi Devices, Bluetooth Scan/Advertise/Connect, Location, Notifications,
+/// and Ignore Battery Optimizations for background keep-alive).
 class AppPermissionsService {
   static bool _requestedOnLaunch = false;
 
@@ -22,7 +23,9 @@ class AppPermissionsService {
     if (kIsWeb || _requestedOnLaunch) return {};
     _requestedOnLaunch = true;
     try {
-      return await allRequiredPermissions.request();
+      final result = await allRequiredPermissions.request();
+      await BackgroundKeepAliveService.requestBatteryOptimizationExemption();
+      return result;
     } catch (e) {
       debugPrint('Permission request skipped/error: $e');
       return {};

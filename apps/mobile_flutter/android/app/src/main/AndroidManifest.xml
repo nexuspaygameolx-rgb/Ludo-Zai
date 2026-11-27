@@ -19,13 +19,15 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32" />
 
-    <!-- Live Voice Chat (Offline P2P Mic & Online Gemini AI Voice) & Keep Alive -->
+    <!-- Live Voice Chat, Background Match Keep-Alive & Battery Optimization Exemption -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Android 13+ Turn, Match & Reward Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -69,6 +71,15 @@
                     android:host="login-callback" />
             </intent-filter>
         </activity>
+
+        <!-- Background Keep-Alive Foreground Service: stays alive when minimized, auto-stops when swiped from Recent Apps -->
+        <service
+            android:name=".LudoKeepAliveService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="true"
+            android:foregroundServiceType="dataSync" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

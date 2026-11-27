@@ -5,6 +5,7 @@ import 'core/config/remote_config_service.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_lobby_screen.dart';
 import 'services/app_permissions_service.dart';
+import 'services/background_keep_alive_service.dart';
 import 'services/community_rules_service.dart';
 import 'services/gemini_agent_service.dart';
 import 'services/local_progress_service.dart';
@@ -64,13 +65,36 @@ class LudoZaiApp extends StatefulWidget {
   State<LudoZaiApp> createState() => _LudoZaiAppState();
 }
 
-class _LudoZaiAppState extends State<LudoZaiApp> {
+class _LudoZaiAppState extends State<LudoZaiApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppPermissionsService.requestAllStartupPermissions();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await AppPermissionsService.requestAllStartupPermissions();
+      await BackgroundKeepAliveService.startKeepAlive();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      // User minimized app: ensure Foreground Keep-Alive Service keeps game running in background
+      BackgroundKeepAliveService.startKeepAlive(
+        title: 'Ludo-Z! Background Mein Chal Raha Hai',
+        body: 'Game band nahi hua — wapas khelne ke liye tap karein.',
+      );
+    } else if (state == AppLifecycleState.detached) {
+      // User fully closed / removed app from Recent Apps
+      BackgroundKeepAliveService.stopKeepAlive();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -81,12 +105,21 @@ class _LudoZaiAppState extends State<LudoZaiApp> {
       themeMode: ThemeMode.system,
       theme: AppTheme.lightTheme(),
       darkTheme: AppTheme.darkTheme(),
-      home: HomeLobbyScreen(
-        remoteConfig: widget.remoteConfig,
-        localProgress: widget.localProgress,
-        communityRulesService: widget.communityRulesService,
-        p2pService: widget.p2pService,
-        geminiService: widget.geminiService,
+      home: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) {
+            // Pressing Back on root Lobby minimizes the app instead of killing it
+            BackgroundKeepAliveService.minimizeToBackground();
+          }
+        },
+        child: HomeLobbyScreen(
+          remoteConfig: widget.remoteConfig,
+          localProgress: widget.localProgress,
+          communityRulesService: widget.communityRulesService,
+          p2pService: widget.p2pService,
+          geminiService: widget.geminiService,
+        ),
       ),
     );
   }
