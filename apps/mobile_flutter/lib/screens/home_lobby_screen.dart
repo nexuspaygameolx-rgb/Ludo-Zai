@@ -10,6 +10,7 @@ import 'custom_rules_studio_screen.dart';
 import 'game_arena_screen.dart';
 import 'gemini_settings_screen.dart';
 import 'offline_p2p_lobby_screen.dart';
+import 'records_and_leagues_screen.dart';
 import 'store_and_dices_screen.dart';
 
 class HomeLobbyScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class HomeLobbyScreen extends StatefulWidget {
 
 class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
   final CashMaalStoreService _store = CashMaalStoreService();
+  int _tabIndex = 0;
   Map<String, dynamic> _stats = {
     'isGuest': true,
     'coins': 2500,
@@ -53,8 +55,10 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
     if (mounted) setState(() => _stats = s);
   }
 
-  void _launchMatch({required bool isOnlineMode, required bool includeGeminiPlayer, bool team2v2 = false}) {
+  void _launchMatch({required bool isOnlineMode, bool team2v2 = false}) {
     final cfg = _activeRules.copyWith(teamMode2v2: team2v2);
+    final useGeminiBuddy = isOnlineMode && widget.geminiService.canPlayInOnlineMatch;
+
     final players = <PlayerState>[
       PlayerState(
         playerId: 'local_user',
@@ -64,11 +68,11 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
       ),
     ];
 
-    if (includeGeminiPlayer && isOnlineMode) {
+    if (useGeminiBuddy) {
       final aiColor = team2v2 ? PlayerColor.yellow : PlayerColor.green;
       players.add(PlayerState(
         playerId: 'gemini_ai',
-        name: '${widget.geminiService.companionDisplayName} (AI)',
+        name: '${widget.geminiService.companionDisplayName} (Buddy)',
         color: aiColor,
         isBot: true,
         isGeminiAi: true,
@@ -93,182 +97,213 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
           initialPlayers: players,
           geminiService: widget.geminiService,
           p2pService: widget.p2pService,
+          localProgress: widget.localProgress,
         ),
       ),
-    );
+    ).then((_) => _loadStats());
   }
 
   @override
   Widget build(BuildContext context) {
-    final isGuest = _stats['isGuest'] == true;
+    final pages = [
+      _buildLobbyTab(),
+      StoreAndDicesScreen(remoteConfig: widget.remoteConfig, localProgress: widget.localProgress),
+      RecordsAndLeaguesScreen(localProgress: widget.localProgress),
+      GeminiSettingsScreen(geminiService: widget.geminiService),
+    ];
+
     return Scaffold(
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Top Royal Currency & Level Bar
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.royalGold,
-                  child: Text(
-                    'L${_stats['level']}',
-                    style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.darkBg),
+      body: pages[_tabIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (i) {
+          setState(() => _tabIndex = i);
+          if (i == 0) _loadStats();
+        },
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.castle_rounded), label: 'Lobby'),
+          NavigationDestination(icon: Icon(Icons.storefront_rounded), label: 'Store & 3D'),
+          NavigationDestination(icon: Icon(Icons.leaderboard_rounded), label: 'Records'),
+          NavigationDestination(icon: Icon(Icons.auto_awesome), label: 'AI Buddy'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLobbyTab() {
+    final isGuest = _stats['isGuest'] == true;
+    return AnimatedBuilder(
+      animation: widget.geminiService,
+      builder: (context, _) {
+        final buddyReady = widget.geminiService.canPlayInOnlineMatch;
+        return SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Top Royal Currency & Level Bar
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.royalGold,
+                    child: Text(
+                      'L${_stats['level']}',
+                      style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.darkBg),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        _currencyChip(Icons.monetization_on, '${_stats['coins']}', AppColors.royalGold),
+                        _currencyChip(Icons.diamond, '${_stats['gems']}', AppColors.activeCyan),
+                        _currencyChip(Icons.emoji_events, '${_stats['trophies']}', AppColors.tokenGreen),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Optional Gmail Sync Banner
+              if (isGuest)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.darkCard,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.royalGold.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
                     children: [
-                      _currencyChip(Icons.monetization_on, '${_stats['coins']}', AppColors.royalGold),
-                      _currencyChip(Icons.diamond, '${_stats['gems']}', AppColors.activeCyan),
-                      _currencyChip(Icons.emoji_events, '${_stats['trophies']}', AppColors.tokenGreen),
+                      const Icon(Icons.phone_android, color: AppColors.royalGold, size: 18),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Guest Mode (Device Save): Offline & Online khelein; Buy/Sell ke liye Gmail link karein.',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => widget.localProgress.signInWithGmailAndSync(),
+                        child: const Text('GMAIL', style: TextStyle(fontWeight: FontWeight.w900)),
+                      ),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.auto_awesome, color: AppColors.activeCyan),
-                  tooltip: 'Gemini AI Companion & Player',
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => GeminiSettingsScreen(geminiService: widget.geminiService),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
 
-            // Optional Gmail Registration Banner (Guest progress saved locally on device)
-            if (isGuest)
+              // Hero 3D Kuti Card + Explicit Play-with-Buddy Switch
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: AppColors.darkCard,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1F2A48), Color(0xFF3A1628)],
+                  ),
                   border: Border.all(color: AppColors.royalGold.withValues(alpha: 0.6)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.phone_android, color: AppColors.royalGold, size: 20),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Guest Mode (Device Save): Offline & Online khelein; Buy/Sell ke liye Gmail link karein.',
-                        style: TextStyle(fontSize: 12),
-                      ),
+                    Row(
+                      children: [
+                        const Icon(Icons.local_fire_department, color: AppColors.kutiCrimson, size: 26),
+                        const SizedBox(width: 8),
+                        const Text(
+                          '3D DESI KUTI LUDO',
+                          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.kutiCrimson,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text('6+X KUTI', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                        ),
+                      ],
                     ),
-                    TextButton(
-                      onPressed: () => widget.localProgress.signInWithGmailAndSync(),
-                      child: const Text('GMAIL SYNC', style: TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 10),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(
+                        'Play with Buddy (${widget.geminiService.companionDisplayName})',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
+                      subtitle: Text(
+                        !widget.geminiService.hasApiKey
+                            ? 'AI Buddy tab mein Gemini Key lagayein'
+                            : (buddyReady
+                                ? 'ON — ${widget.geminiService.companionDisplayName} online match mein khelegi & gupshup karegi'
+                                : 'OFF — Normal match chalega'),
+                        style: const TextStyle(fontSize: 11.5),
+                      ),
+                      value: widget.geminiService.playWithBuddyEnabled,
+                      activeThumbColor: AppColors.activeCyan,
+                      onChanged: (v) {
+                        if (v && !widget.geminiService.hasApiKey) {
+                          setState(() => _tabIndex = 3);
+                          return;
+                        }
+                        widget.geminiService.setPlayWithBuddySwitch(v);
+                      },
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
 
-            // Hero Banner
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1F2A48), Color(0xFF3A1628)],
-                ),
-                border: Border.all(color: AppColors.royalGold.withValues(alpha: 0.6)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              // 4 Main Mode Cards
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.15,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.local_fire_department, color: AppColors.kutiCrimson, size: 28),
-                      const SizedBox(width: 8),
-                      const Text(
-                        '3D DESI KUTI LUDO',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 0.8),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.kutiCrimson,
-                          borderRadius: BorderRadius.circular(12),
+                  _modeCard(
+                    title: 'Kuti Online Arena',
+                    subtitle: buddyReady ? 'With ${widget.geminiService.companionDisplayName}' : '1v1 / 4P Online',
+                    icon: Icons.public,
+                    accent: AppColors.kutiCrimson,
+                    onTap: () => _launchMatch(isOnlineMode: true),
+                  ),
+                  _modeCard(
+                    title: 'Apne Mobile (Offline)',
+                    subtitle: 'Nearby / Hotspot + Mic',
+                    icon: Icons.wifi_tethering,
+                    accent: AppColors.tokenGreen,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OfflineP2PLobbyScreen(
+                          p2pService: widget.p2pService,
+                          rulesConfig: _activeRules,
+                          geminiService: widget.geminiService,
+                          localProgress: widget.localProgress,
                         ),
-                        child: const Text('6+X KUTI ON', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '100 Rs = 1,000 Coins | 100 Rs = 100 Gems | 1 Gem = 10 Coins | CashMaal Direct Auto-Withdraw!',
-                    style: TextStyle(fontSize: 12.5, height: 1.4),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-
-            // 4 Main Mode Cards
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.15,
-              children: [
-                _modeCard(
-                  title: 'Kuti Online Arena',
-                  subtitle: 'Guest ya Gmail Dono Chalein',
-                  icon: Icons.public,
-                  accent: AppColors.kutiCrimson,
-                  onTap: () => _launchMatch(isOnlineMode: true, includeGeminiPlayer: false),
-                ),
-                _modeCard(
-                  title: 'Play With Gemini AI',
-                  subtitle: 'AI Plays & Talks Live',
-                  icon: Icons.record_voice_over,
-                  accent: AppColors.activeCyan,
-                  onTap: () => _launchMatch(isOnlineMode: true, includeGeminiPlayer: true),
-                ),
-                _modeCard(
-                  title: 'Apne Mobile (Offline)',
-                  subtitle: 'Nearby / Hotspot + Mic',
-                  icon: Icons.wifi_tethering,
-                  accent: AppColors.tokenGreen,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => OfflineP2PLobbyScreen(
-                        p2pService: widget.p2pService,
-                        rulesConfig: _activeRules,
                       ),
                     ),
                   ),
-                ),
-                _modeCard(
-                  title: '2v2 Jodi Match',
-                  subtitle: 'Partner + Gemini Team',
-                  icon: Icons.groups,
-                  accent: AppColors.royalGold,
-                  onTap: () => _launchMatch(isOnlineMode: true, includeGeminiPlayer: true, team2v2: true),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.tune),
-                    label: const Text('Rule Switches'),
-                    onPressed: () async {
+                  _modeCard(
+                    title: '2v2 Jodi Match',
+                    subtitle: buddyReady ? 'Partner: ${widget.geminiService.companionDisplayName}' : 'Team-Up Mode',
+                    icon: Icons.groups,
+                    accent: AppColors.royalGold,
+                    onTap: () => _launchMatch(isOnlineMode: true, team2v2: true),
+                  ),
+                  _modeCard(
+                    title: 'Rule Switches',
+                    subtitle: 'Kuti, Tiggi & Custom Rules',
+                    icon: Icons.tune,
+                    accent: AppColors.activeCyan,
+                    onTap: () async {
                       final updated = await Navigator.push<LudoRulesConfig>(
                         context,
                         MaterialPageRoute(
@@ -278,32 +313,12 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
                       if (updated != null) setState(() => _activeRules = updated);
                     },
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.tokenGreen, foregroundColor: Colors.white),
-                    icon: const Icon(Icons.storefront),
-                    label: const Text('CashMaal & 3D'),
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => StoreAndDicesScreen(
-                            remoteConfig: widget.remoteConfig,
-                            localProgress: widget.localProgress,
-                          ),
-                        ),
-                      );
-                      _loadStats();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

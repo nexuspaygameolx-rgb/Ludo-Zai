@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:ludo_rules/ludo_rules.dart';
 import '../core/theme/app_theme.dart';
@@ -19,11 +20,104 @@ class _CustomRulesStudioScreenState extends State<CustomRulesStudioScreen> {
     _cfg = widget.initialConfig;
   }
 
+  void _openCreateCustomRuleSheet() {
+    final titleCtrl = TextEditingController();
+    String trigger = 'on_capture';
+    String condition = 'has_finished_token';
+    String action = 'grant_extra_turn';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.darkCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Create New Ilaqai / Custom Rule',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.royalGold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Rule Name (e.g. Sahiwal Double Bonus)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: trigger,
+                decoration: const InputDecoration(labelText: 'Step 1: Trigger (Kab Ho?)', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'on_capture', child: Text('Goti Katne Par (On Capture)')),
+                  DropdownMenuItem(value: 'on_home_entry', child: Text('Ghar Line Mein Jane Par (On Home Entry)')),
+                  DropdownMenuItem(value: 'on_dice_roll', child: Text('Specific Dice Roll Par')),
+                ],
+                onChanged: (v) => setSheetState(() => trigger = v ?? 'on_capture'),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: condition,
+                decoration: const InputDecoration(labelText: 'Step 2: Condition (Shart?)', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'has_finished_token', child: Text('Kam Az Kam 1 Goti Puggi Ho')),
+                  DropdownMenuItem(value: 'is_kuti', child: Text('Goti Ulti Kuti Ho')),
+                ],
+                onChanged: (v) => setSheetState(() => condition = v ?? 'has_finished_token'),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: action,
+                decoration: const InputDecoration(labelText: 'Step 3: Action (Asar?)', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'grant_extra_turn', child: Text('Extra Turn Mile')),
+                  DropdownMenuItem(value: 'flip_to_kuti', child: Text('Goti Ulti Kuti Ban Jaye')),
+                ],
+                onChanged: (v) => setSheetState(() => action = v ?? 'grant_extra_turn'),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add_circle),
+                  label: const Text('Add Rule & Generate Share Code'),
+                  onPressed: () {
+                    final code = List.generate(6, (_) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Random().nextInt(32)]).join();
+                    final newRule = CustomRuleDefinition(
+                      id: code,
+                      name: titleCtrl.text.trim().isEmpty ? 'Desi Rule ($code)' : '${titleCtrl.text.trim()} [$code]',
+                      trigger: trigger,
+                      condition: condition,
+                      action: action,
+                    );
+                    setState(() {
+                      _cfg = _cfg.copyWith(customRules: [..._cfg.customRules, newRule]);
+                    });
+                    Navigator.pop(ctx);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Desi Rule Switches & Presets'),
+        title: const Text('Desi Rule Switches & Builder'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, _cfg),
@@ -31,10 +125,16 @@ class _CustomRulesStudioScreenState extends State<CustomRulesStudioScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppColors.royalGold,
+        foregroundColor: AppColors.darkBg,
+        icon: const Icon(Icons.add),
+        label: const Text('New Rule', style: TextStyle(fontWeight: FontWeight.w900)),
+        onPressed: _openCreateCustomRuleSheet,
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
         children: [
-          // Regional Presets
           Wrap(
             spacing: 8,
             children: [
@@ -55,8 +155,7 @@ class _CustomRulesStudioScreenState extends State<CustomRulesStudioScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
+          const SizedBox(height: 14),
           SwitchListTile(
             title: const Text('Kuti Mode (Double Dice + Ghar Wali Ulti Kuti)'),
             subtitle: const Text('6+X exact distance par home-column mein kuti aur hamesha ulti chaal'),
@@ -71,7 +170,6 @@ class _CustomRulesStudioScreenState extends State<CustomRulesStudioScreen> {
           ),
           SwitchListTile(
             title: const Text('Ulti Kuti Sweep Kill (Raaste Ki Saari Gotiyan)'),
-            subtitle: const Text('ON = Raaste ki saari gotiyan marein | OFF = Sirf rukne wale dabbe par'),
             value: _cfg.kutiKillScope == KutiKillScope.sweepKill,
             onChanged: (v) => setState(() => _cfg = _cfg.copyWith(
                   kutiKillScope: v ? KutiKillScope.sweepKill : KutiKillScope.landingKill,
@@ -121,6 +219,36 @@ class _CustomRulesStudioScreenState extends State<CustomRulesStudioScreen> {
             value: _cfg.katiBaghairGharBand,
             onChanged: (v) => setState(() => _cfg = _cfg.copyWith(katiBaghairGharBand: v)),
           ),
+          if (_cfg.customRules.isNotEmpty) ...[
+            const Divider(height: 24),
+            const Text('User-Created Custom Rules:', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.royalGold)),
+            ..._cfg.customRules.map(
+              (r) => SwitchListTile(
+                title: Text(r.name),
+                subtitle: Text('${r.trigger} -> ${r.condition} -> ${r.action}'),
+                value: r.enabled,
+                onChanged: (v) {
+                  setState(() {
+                    _cfg = _cfg.copyWith(
+                      customRules: _cfg.customRules
+                          .map((item) => item.id == r.id
+                              ? CustomRuleDefinition(
+                                  id: item.id,
+                                  name: item.name,
+                                  trigger: item.trigger,
+                                  condition: item.condition,
+                                  conditionValue: item.conditionValue,
+                                  action: item.action,
+                                  enabled: v,
+                                )
+                              : item)
+                          .toList(),
+                    );
+                  });
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );

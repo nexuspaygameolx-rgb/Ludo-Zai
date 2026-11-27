@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:ludo_rules/ludo_rules.dart';
 import '../core/theme/app_theme.dart';
+import '../services/gemini_agent_service.dart';
+import '../services/local_progress_service.dart';
 import '../services/offline_p2p_service.dart';
+import 'game_arena_screen.dart';
 
 class OfflineP2PLobbyScreen extends StatefulWidget {
   final OfflineP2PService p2pService;
   final LudoRulesConfig rulesConfig;
+  final GeminiAgentService geminiService;
+  final LocalProgressService localProgress;
 
   const OfflineP2PLobbyScreen({
     super.key,
     required this.p2pService,
     required this.rulesConfig,
+    required this.geminiService,
+    required this.localProgress,
   });
 
   @override
@@ -20,6 +27,40 @@ class OfflineP2PLobbyScreen extends StatefulWidget {
 class _OfflineP2PLobbyScreenState extends State<OfflineP2PLobbyScreen> {
   final TextEditingController _nameCtrl = TextEditingController(text: 'Desi Player');
   OfflineTransportMode _mode = OfflineTransportMode.nearbyAuto;
+
+  void _enterOfflineMatch() {
+    final players = widget.p2pService.players.isNotEmpty
+        ? widget.p2pService.players
+        : [
+            PlayerState(
+              playerId: 'host_0',
+              name: _nameCtrl.text.trim(),
+              color: PlayerColor.red,
+              tokens: List.generate(4, (i) => TokenState(id: 'red_$i', owner: PlayerColor.red)),
+            ),
+            PlayerState(
+              playerId: 'pass_1',
+              name: 'Friend (Pass & Play)',
+              color: PlayerColor.green,
+              tokens: List.generate(4, (i) => TokenState(id: 'green_$i', owner: PlayerColor.green)),
+            ),
+          ];
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GameArenaScreen(
+          isOnlineMode: false,
+          isOfflineP2P: widget.p2pService.isConnected,
+          rulesConfig: widget.rulesConfig,
+          initialPlayers: players,
+          geminiService: widget.geminiService,
+          p2pService: widget.p2pService,
+          localProgress: widget.localProgress,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +128,17 @@ class _OfflineP2PLobbyScreenState extends State<OfflineP2PLobbyScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.tokenGreen, foregroundColor: Colors.white),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: Text(
+                  widget.p2pService.isConnected
+                      ? 'Start Connected Multi-Phone Match (${widget.p2pService.players.length} Players)'
+                      : 'Start Local Pass & Play Match',
+                ),
+                onPressed: _enterOfflineMatch,
               ),
               const SizedBox(height: 20),
               if (widget.p2pService.discoveredRooms.isNotEmpty) ...[

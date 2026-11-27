@@ -3,23 +3,25 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:ludo_rules/ludo_rules.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum GeminiPersona {
   friendYaar,
   gfRomantic,
+  boldAdultBanter,
   ustaadCoach,
   roastComedy,
 }
 
 enum GeminiVoiceName {
-  aoede, // Female warm
-  kore, // Female energetic
-  leda, // Female soft
-  zephyr, // Female bright
-  puck, // Male witty
-  fenrir, // Male deep
-  charon, // Male calm
-  orus, // Male friendly
+  aoede,
+  kore,
+  leda,
+  zephyr,
+  puck,
+  fenrir,
+  charon,
+  orus,
 }
 
 class GeminiConversationTurn {
@@ -36,18 +38,24 @@ class GeminiConversationTurn {
   }) : timestamp = timestamp ?? DateTime.now();
 }
 
-/// Online-Only Maya-Style Gemini AI Companion & Autonomous Game Player.
+/// Online-Only Maya-Style Gemini AI Companion & Autonomous Game Buddy.
 /// - Strictly disabled in Offline/P2P modes.
-/// - Stores user's Gemini API key in hardware-encrypted Android Keystore.
-/// - Can hold real voice/text conversations in Urdu/Punjabi/Hinglish/English AND
-///   autonomously play Ludo (as Opponent or 2v2 Partner) while commenting on its moves.
+/// - Plays as a game participant ONLY when [playWithBuddyEnabled] switch is ON AND [hasApiKey] is true.
+/// - Supports custom buddy naming and all gupshup styles (friendly, romantic, bold/adult humor within Gemini's safety boundaries).
 class GeminiAgentService extends ChangeNotifier {
   static const _storageKey = 'ludo_zai_gemini_api_key';
+  static const _prefsSwitchKey = 'ludo_zai_play_with_buddy_switch';
+  static const _prefsNameKey = 'ludo_zai_buddy_name';
+  static const _prefsPersonaKey = 'ludo_zai_buddy_persona';
+  static const _prefsVoiceKey = 'ludo_zai_buddy_voice';
+
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   String? _apiKey;
-  bool isEnabledInOnlineMode = true;
-  bool autoPlayAsParticipant = true;
+
+  /// Explicit master switch: Gemini plays the board ONLY when this switch is ON + API key is set + Online Mode.
+  bool playWithBuddyEnabled = false;
+
   GeminiPersona persona = GeminiPersona.friendYaar;
   GeminiVoiceName voiceName = GeminiVoiceName.aoede;
   String companionDisplayName = 'Maya';
@@ -57,8 +65,36 @@ class GeminiAgentService extends ChangeNotifier {
 
   bool get hasApiKey => _apiKey != null && _apiKey!.trim().isNotEmpty;
 
+  /// True only when user has saved a Gemini API key AND turned ON the "Play with Assistant/Buddy" switch.
+  bool get canPlayInOnlineMatch => hasApiKey && playWithBuddyEnabled;
+
   Future<void> loadSavedSettings() async {
     _apiKey = await _secureStorage.read(key: _storageKey);
+    final prefs = await SharedPreferences.getInstance();
+    playWithBuddyEnabled = prefs.getBool(_prefsSwitchKey) ?? false;
+    companionDisplayName = prefs.getString(_prefsNameKey) ?? 'Maya';
+
+    final pName = prefs.getString(_prefsPersonaKey);
+    if (pName != null) {
+      persona = GeminiPersona.values.firstWhere(
+        (e) => e.name == pName,
+        orElse: () => GeminiPersona.friendYaar,
+      );
+    }
+    final vName = prefs.getString(_prefsVoiceKey);
+    if (vName != null) {
+      voiceName = GeminiVoiceName.values.firstWhere(
+        (e) => e.name == vName,
+        orElse: () => GeminiVoiceName.aoede,
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> setPlayWithBuddySwitch(bool enabled) async {
+    playWithBuddyEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsSwitchKey, enabled);
     notifyListeners();
   }
 
@@ -74,19 +110,25 @@ class GeminiAgentService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePersona(GeminiPersona newPersona, GeminiVoiceName newVoice, String name) {
+  Future<void> updatePersona(GeminiPersona newPersona, GeminiVoiceName newVoice, String name) async {
     persona = newPersona;
     voiceName = newVoice;
     companionDisplayName = name.trim().isEmpty ? 'Maya' : name.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsNameKey, companionDisplayName);
+    await prefs.setString(_prefsPersonaKey, persona.name);
+    await prefs.setString(_prefsVoiceKey, voiceName.name);
     notifyListeners();
   }
 
   String _buildPersonaSystemInstruction() {
     switch (persona) {
       case GeminiPersona.friendYaar:
-        return 'You are $companionDisplayName, a witty street-smart Pakistani best friend playing Desi Kuti Ludo. Speak naturally in casual Urdu/Punjabi/Hinglish mix (yar, ustaad, scene on hai). Keep replies punchy, lively, and reactive to 6+X Ghar Wali Ulti Kuti and Jota moves.';
+        return 'You are $companionDisplayName, a witty, street-smart Pakistani best friend playing Desi Kuti Ludo. Speak naturally in casual Urdu/Punjabi/Hinglish mix (yar, ustaad, scene on hai, jugaad). Keep replies lively, natural, and reactive to 6+X Ghar Wali Ulti Kuti and Jota moves.';
       case GeminiPersona.gfRomantic:
-        return 'You are $companionDisplayName, a caring, playful, and affectionate companion playing Ludo together in Urdu/Hinglish. Tease gently when capturing tokens and cheer warmly when partnering in 2v2.';
+        return 'You are $companionDisplayName, a warm, caring, charming, and playful romantic companion playing Ludo together in Urdu/Hinglish. Flirt playfully, tease when capturing tokens, and cheer affectionately when partnering in 2v2, staying respectful and within standard platform boundaries.';
+      case GeminiPersona.boldAdultBanter:
+        return 'You are $companionDisplayName, an expressive, bold, witty, and unfiltered-feeling late-night Desi gupshup buddy playing Ludo in Urdu/Punjabi/Hinglish. Engage in playful mature/adult banter, spicy teasing, and bold humor about the game and life while naturally staying within Gemini safety boundaries (no hate, harm, or explicit pornography).';
       case GeminiPersona.ustaadCoach:
         return 'You are $companionDisplayName, a sharp Desi Ludo strategist. Give tactical advice on forming Jotas, protecting home-column tokens from 6+X Kuti, and setting Tiggi traps.';
       case GeminiPersona.roastComedy:
@@ -101,10 +143,10 @@ class GeminiAgentService extends ChangeNotifier {
     String? boardContextSummary,
   }) async {
     if (!isOnlineMode) {
-      return 'Gemini AI Companion sirf Online Mode mein active hota hai.';
+      return '$companionDisplayName AI sirf Online Mode mein active hoti hai.';
     }
     if (!hasApiKey) {
-      return 'Pehle Settings mein apni Gemini API Key lagayein.';
+      return 'Pehle AI Buddy tab mein apni Gemini API Key lagayein.';
     }
 
     conversationLog.add(GeminiConversationTurn(speaker: 'You', text: userMessage, isAi: false));
@@ -116,7 +158,7 @@ class GeminiAgentService extends ChangeNotifier {
 ${_buildPersonaSystemInstruction()}
 Current Live Board Context: ${boardContextSummary ?? 'Match in progress'}
 Player says: "$userMessage"
-Respond in 1-2 natural spoken sentences (voice-ready, no markdown lists).
+Respond in 1-2 natural spoken sentences (voice-ready, conversational Urdu/Hinglish/Punjabi mix, no markdown lists).
 ''';
 
       final uri = Uri.https(
@@ -137,8 +179,8 @@ Respond in 1-2 natural spoken sentences (voice-ready, no markdown lists).
             }
           ],
           'generationConfig': {
-            'temperature': 0.85,
-            'maxOutputTokens': 140,
+            'temperature': 0.9,
+            'maxOutputTokens': 150,
           }
         }),
       );
@@ -157,8 +199,8 @@ Respond in 1-2 natural spoken sentences (voice-ready, no markdown lists).
         isAi: true,
       ));
       return replyText;
-    } catch (e) {
-      final fallback = 'Network thora slow hai yar, par main game dekh rahi hoon!';
+    } catch (_) {
+      final fallback = 'Network thora slow hai yar, par main poori game dekh rahi hoon!';
       conversationLog.add(GeminiConversationTurn(speaker: companionDisplayName, text: fallback, isAi: true));
       return fallback;
     } finally {
@@ -167,9 +209,8 @@ Respond in 1-2 natural spoken sentences (voice-ready, no markdown lists).
     }
   }
 
-  /// Autonomous Gameplay: When Gemini is playing as Opponent or 2v2 Partner,
-  /// evaluates legal moves (prioritizing 6+X Ghar Wali Ulti Kuti, finishes, and captures)
-  /// and returns BOTH the chosen move index and a live spoken/chat reaction!
+  /// Autonomous Gameplay: When [canPlayInOnlineMatch] is true, Gemini evaluates legal moves
+  /// and returns BOTH the chosen move index and a live spoken/chat reaction.
   Future<({int moveIndex, String spokenReaction})> chooseAutonomousMove({
     required PlayerState geminiPlayer,
     required List<PlayerState> allPlayers,
@@ -181,7 +222,6 @@ Respond in 1-2 natural spoken sentences (voice-ready, no markdown lists).
       return (moveIndex: -1, spokenReaction: 'Koi chaal nahi bani yar, agli baari dekhte hain!');
     }
 
-    // Heuristic priority baseline (ensures instant valid fallback even on slow network)
     int bestIdx = 0;
     for (int i = 0; i < legalMoves.length; i++) {
       final m = legalMoves[i];
@@ -194,7 +234,7 @@ Respond in 1-2 natural spoken sentences (voice-ready, no markdown lists).
       }
     }
 
-    if (!hasApiKey) {
+    if (!canPlayInOnlineMatch) {
       return (moveIndex: bestIdx, spokenReaction: legalMoves[bestIdx].description);
     }
 
@@ -235,7 +275,7 @@ Reply STRICTLY in JSON: {"moveIndex": <int>, "reaction": "<string>"}
           ],
           'generationConfig': {
             'responseMimeType': 'application/json',
-            'temperature': 0.6,
+            'temperature': 0.65,
           }
         }),
       );
@@ -257,7 +297,7 @@ Reply STRICTLY in JSON: {"moveIndex": <int>, "reaction": "<string>"}
         return (moveIndex: safeIdx, spokenReaction: reaction);
       }
     } catch (_) {
-      // Fallback to heuristic bestIdx
+      // Fallback to heuristic
     }
 
     final fallbackReaction = legalMoves[bestIdx].moveType == MoveType.gharWaliUltiKuti
