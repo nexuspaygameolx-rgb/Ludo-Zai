@@ -4,6 +4,7 @@ import '../core/config/remote_config_service.dart';
 import '../core/theme/app_theme.dart';
 import '../services/cashmaal_store_service.dart';
 import '../services/gemini_agent_service.dart';
+import '../services/local_progress_service.dart';
 import '../services/offline_p2p_service.dart';
 import 'custom_rules_studio_screen.dart';
 import 'game_arena_screen.dart';
@@ -13,12 +14,14 @@ import 'store_and_dices_screen.dart';
 
 class HomeLobbyScreen extends StatefulWidget {
   final RemoteConfigService remoteConfig;
+  final LocalProgressService localProgress;
   final OfflineP2PService p2pService;
   final GeminiAgentService geminiService;
 
   const HomeLobbyScreen({
     super.key,
     required this.remoteConfig,
+    required this.localProgress,
     required this.p2pService,
     required this.geminiService,
   });
@@ -29,7 +32,14 @@ class HomeLobbyScreen extends StatefulWidget {
 
 class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
   final CashMaalStoreService _store = CashMaalStoreService();
-  Map<String, dynamic> _stats = {'coins': 2500, 'gems': 25, 'trophies': 0, 'level': 1, 'league': 'Bronze'};
+  Map<String, dynamic> _stats = {
+    'isGuest': true,
+    'coins': 2500,
+    'gems': 25,
+    'trophies': 0,
+    'level': 1,
+    'league': 'Guest (Device Save)',
+  };
   LudoRulesConfig _activeRules = LudoRulesConfig.punjabKutiSpecial();
 
   @override
@@ -39,7 +49,7 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
   }
 
   Future<void> _loadStats() async {
-    final s = await _store.fetchWalletAndProfile();
+    final s = await _store.fetchWalletAndProfile(widget.localProgress);
     if (mounted) setState(() => _stats = s);
   }
 
@@ -48,7 +58,7 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
     final players = <PlayerState>[
       PlayerState(
         playerId: 'local_user',
-        name: 'You',
+        name: _stats['isGuest'] == true ? 'Guest Player' : (_stats['email'] as String? ?? 'You'),
         color: PlayerColor.red,
         tokens: List.generate(4, (i) => TokenState(id: 'red_$i', owner: PlayerColor.red)),
       ),
@@ -90,6 +100,7 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isGuest = _stats['isGuest'] == true;
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -130,7 +141,35 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 12),
+
+            // Optional Gmail Registration Banner (Guest progress saved locally on device)
+            if (isGuest)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.darkCard,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.royalGold.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.phone_android, color: AppColors.royalGold, size: 20),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Guest Mode (Device Save): Offline & Online khelein; Buy/Sell ke liye Gmail link karein.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => widget.localProgress.signInWithGmailAndSync(),
+                      child: const Text('GMAIL SYNC', style: TextStyle(fontWeight: FontWeight.w900)),
+                    ),
+                  ],
+                ),
+              ),
 
             // Hero Banner
             Container(
@@ -166,8 +205,8 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Ghar wali center line mein exact daane par Ulti Kuti, 1 goti par auto 1-Dice, aur bina internet apne-apne mobile par live audio ke saath khelein!',
-                    style: TextStyle(fontSize: 13, height: 1.4),
+                    '100 Rs = 1,000 Coins | 100 Rs = 100 Gems | 1 Gem = 10 Coins | CashMaal Direct Auto-Withdraw!',
+                    style: TextStyle(fontSize: 12.5, height: 1.4),
                   ),
                 ],
               ),
@@ -185,7 +224,7 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
               children: [
                 _modeCard(
                   title: 'Kuti Online Arena',
-                  subtitle: '2 Dice -> 1 Dice + Live Chat',
+                  subtitle: 'Guest ya Gmail Dono Chalein',
                   icon: Icons.public,
                   accent: AppColors.kutiCrimson,
                   onTap: () => _launchMatch(isOnlineMode: true, includeGeminiPlayer: false),
@@ -223,7 +262,6 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Custom Rules Studio & CashMaal Store Quick Actions
             Row(
               children: [
                 Expanded(
@@ -251,7 +289,10 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => StoreAndDicesScreen(remoteConfig: widget.remoteConfig),
+                          builder: (_) => StoreAndDicesScreen(
+                            remoteConfig: widget.remoteConfig,
+                            localProgress: widget.localProgress,
+                          ),
                         ),
                       );
                       _loadStats();

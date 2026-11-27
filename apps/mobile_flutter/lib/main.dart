@@ -5,6 +5,7 @@ import 'core/config/remote_config_service.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_lobby_screen.dart';
 import 'services/gemini_agent_service.dart';
+import 'services/local_progress_service.dart';
 import 'services/offline_p2p_service.dart';
 
 Future<void> main() async {
@@ -20,6 +21,10 @@ Future<void> main() async {
   final remoteConfig = RemoteConfigService();
   await remoteConfig.fetchFromBackend();
 
+  final localProgress = LocalProgressService();
+  await localProgress.loadFromDevice();
+  await localProgress.syncDeviceProgressToCloudIfNeeded();
+
   final geminiService = GeminiAgentService();
   await geminiService.loadSavedSettings();
 
@@ -27,6 +32,7 @@ Future<void> main() async {
 
   runApp(LudoZaiApp(
     remoteConfig: remoteConfig,
+    localProgress: localProgress,
     geminiService: geminiService,
     p2pService: p2pService,
   ));
@@ -34,12 +40,14 @@ Future<void> main() async {
 
 class LudoZaiApp extends StatelessWidget {
   final RemoteConfigService remoteConfig;
+  final LocalProgressService localProgress;
   final GeminiAgentService geminiService;
   final OfflineP2PService p2pService;
 
   const LudoZaiApp({
     super.key,
     required this.remoteConfig,
+    required this.localProgress,
     required this.geminiService,
     required this.p2pService,
   });
@@ -54,6 +62,7 @@ class LudoZaiApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme(),
       home: HomeLobbyScreen(
         remoteConfig: remoteConfig,
+        localProgress: localProgress,
         p2pService: p2pService,
         geminiService: geminiService,
       ),
