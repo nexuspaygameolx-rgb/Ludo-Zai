@@ -1,0 +1,21 @@
+workflows:
+  ludo-zai-android-release:
+    name: Ludo-Z! 3D Android APK Build
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Run Pure-Dart Desi Kuti Rule Engine Tests
+        script: |
+          cd packages/ludo_rules
+          dart pub get
+          dart test
+      - name: Build Obfuscated Release APK
+        script: |
+          cd apps/mobile_flutter
+          cp .env.example .env
+          flutter pub get
+          flutter build apk --release --obfuscate --split-debug-info=build/debug-info
+    artifacts:
+      - apps/mobile_flutter/build/app/outputs/flutter-apk/*.apk

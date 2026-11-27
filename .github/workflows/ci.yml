@@ -1,0 +1,30 @@
+name: Ludo-Z! CI Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  dart-rule-engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: Test ludo_rules package
+        working-directory: packages/ludo_rules
+        run: |
+          dart pub get
+          dart test
+
+  deno-edge-function-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - name: Run Supabase shared engine tests
+        working-directory: supabase/functions/_shared
+        run: deno test
