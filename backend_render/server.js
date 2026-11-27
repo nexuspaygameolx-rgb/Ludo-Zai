@@ -44,7 +44,102 @@ app.post("/api/match/roll-dice", async (req, res) => {
   }
 });
 
-// 3. Automated CashMaal Buy Order Creation (100 PKR = 1000 Coins, 100 PKR = 100 Gems)
+// Helper: Compile plain Urdu/English/Punjabi natural-language instruction into executable Ludo rule
+function compileNaturalInstruction(instructionText, customTitle) {
+  const lower = String(instructionText || "").toLowerCase();
+
+  let trigger = "on_capture";
+  if (lower.includes("ghar") || lower.includes("home") || lower.includes("lane") || lower.includes("ander")) {
+    trigger = "on_home_entry";
+  } else if (lower.includes("dice") || lower.includes("daana") || lower.includes("chakka") || lower.includes("6") || lower.includes("12") || lower.includes("roll")) {
+    trigger = "on_dice_roll";
+  }
+
+  let condition = "has_finished_token";
+  let conditionValue = null;
+  if (lower.includes("kuti") || lower.includes("ulti") || lower.includes("reverse")) {
+    condition = "is_kuti";
+  } else if (lower.includes("12") || lower.includes("double six") || lower.includes("do chakkay")) {
+    condition = "dice_sum_exact";
+    conditionValue = 12;
+  } else if (lower.includes("6") || lower.includes("chakka")) {
+    condition = "dice_sum_exact";
+    conditionValue = 6;
+  }
+
+  let action = "grant_extra_turn";
+  if (lower.includes("kuti") || lower.includes("ulti") || lower.includes("ulTi") || lower.includes("reverse") || lower.includes("palat")) {
+    action = "flip_to_kuti";
+  }
+
+  const code = crypto.randomBytes(3).toString("hex").toUpperCase();
+  const title = (customTitle && customTitle.trim())
+    ? customTitle.trim()
+    : instructionText.trim().slice(0, 38) + (instructionText.trim().length > 38 ? "..." : "");
+
+  return {
+    rule_code: code,
+    title,
+    natural_instruction: instructionText.trim(),
+    trigger_type: trigger,
+    condition_type: condition,
+    condition_value: conditionValue,
+    action_type: action,
+  };
+}
+
+// 3. Compile Natural-Language Rule & Save to Global Community Database
+app.post("/api/rules/compile-and-save", async (req, res) => {
+  try {
+    const { instruction, title, creator_id, creator_name } = req.body;
+    if (!instruction || String(instruction).trim().length < 4) {
+      throw new Error("Please write a clear rule instruction");
+    }
+
+    const compiled = compileNaturalInstruction(instruction, title);
+
+    if (db) {
+      const { data, error } = await db
+        .from("community_nl_rules")
+        .upsert(
+          {
+            ...compiled,
+            creator_id: creator_id || null,
+            creator_name: creator_name || "Desi Player",
+            is_approved: true,
+          },
+          { onConflict: "rule_code" }
+        )
+        .select()
+        .single();
+      if (error) throw error;
+      return res.json({ ok: true, rule: data });
+    }
+
+    res.json({ ok: true, rule: compiled });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 4. Fetch All Community Natural-Language Rules for All Users
+app.get("/api/rules/community", async (_req, res) => {
+  try {
+    if (!db) return res.json({ rules: [] });
+    const { data, error } = await db
+      .from("community_nl_rules")
+      .select("*")
+      .eq("is_approved", true)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    res.json({ rules: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Automated CashMaal Buy Order Creation (100 PKR = 1000 Coins, 100 PKR = 100 Gems)
 app.post("/api/cashmaal/buy", async (req, res) => {
   try {
     if (!db) throw new Error("Server DB not configured");
@@ -94,7 +189,7 @@ app.post("/api/cashmaal/buy", async (req, res) => {
   }
 });
 
-// 4. Automated CashMaal Sell & Direct Account Withdrawal (30% Admin Fee -> 70% Net Payout)
+// 6. Automated CashMaal Sell & Direct Account Withdrawal (30% Admin Fee -> 70% Net Payout)
 app.post("/api/cashmaal/sell", async (req, res) => {
   try {
     if (!db) throw new Error("Server DB not configured");
@@ -231,7 +326,7 @@ app.post("/api/cashmaal/sell", async (req, res) => {
   }
 });
 
-// 5. CashMaal IPN Webhook
+// 7. CashMaal IPN Webhook
 app.post("/api/cashmaal/ipn", async (req, res) => {
   try {
     if (!db) throw new Error("Server DB not configured");

@@ -3,6 +3,7 @@ import 'package:ludo_rules/ludo_rules.dart';
 import '../core/config/remote_config_service.dart';
 import '../core/theme/app_theme.dart';
 import '../services/cashmaal_store_service.dart';
+import '../services/community_rules_service.dart';
 import '../services/gemini_agent_service.dart';
 import '../services/local_progress_service.dart';
 import '../services/offline_p2p_service.dart';
@@ -16,6 +17,7 @@ import 'store_and_dices_screen.dart';
 class HomeLobbyScreen extends StatefulWidget {
   final RemoteConfigService remoteConfig;
   final LocalProgressService localProgress;
+  final CommunityRulesService communityRulesService;
   final OfflineP2PService p2pService;
   final GeminiAgentService geminiService;
 
@@ -23,6 +25,7 @@ class HomeLobbyScreen extends StatefulWidget {
     super.key,
     required this.remoteConfig,
     required this.localProgress,
+    required this.communityRulesService,
     required this.p2pService,
     required this.geminiService,
   });
@@ -55,8 +58,15 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
     if (mounted) setState(() => _stats = s);
   }
 
+  LudoRulesConfig _effectiveRules({bool team2v2 = false}) {
+    return _activeRules.copyWith(
+      teamMode2v2: team2v2,
+      customRules: widget.communityRulesService.getActiveCustomRuleDefinitions(),
+    );
+  }
+
   void _launchMatch({required bool isOnlineMode, bool team2v2 = false}) {
-    final cfg = _activeRules.copyWith(teamMode2v2: team2v2);
+    final cfg = _effectiveRules(team2v2: team2v2);
     final useGeminiBuddy = isOnlineMode && widget.geminiService.canPlayInOnlineMatch;
 
     final players = <PlayerState>[
@@ -133,14 +143,14 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
   Widget _buildLobbyTab() {
     final isGuest = _stats['isGuest'] == true;
     return AnimatedBuilder(
-      animation: widget.geminiService,
+      animation: Listenable.merge([widget.geminiService, widget.communityRulesService]),
       builder: (context, _) {
         final buddyReady = widget.geminiService.canPlayInOnlineMatch;
+        final activeCustomCount = widget.communityRulesService.enabledRuleCodes.length;
         return SafeArea(
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Top Royal Currency & Level Bar
               Row(
                 children: [
                   CircleAvatar(
@@ -167,7 +177,6 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Optional Gmail Sync Banner
               if (isGuest)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -195,7 +204,6 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
                   ),
                 ),
 
-              // Hero 3D Kuti Card + Explicit Play-with-Buddy Switch
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -258,7 +266,6 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 4 Main Mode Cards
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
@@ -284,7 +291,7 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
                       MaterialPageRoute(
                         builder: (_) => OfflineP2PLobbyScreen(
                           p2pService: widget.p2pService,
-                          rulesConfig: _activeRules,
+                          rulesConfig: _effectiveRules(),
                           geminiService: widget.geminiService,
                           localProgress: widget.localProgress,
                         ),
@@ -300,14 +307,19 @@ class _HomeLobbyScreenState extends State<HomeLobbyScreen> {
                   ),
                   _modeCard(
                     title: 'Rule Switches',
-                    subtitle: 'Kuti, Tiggi & Custom Rules',
+                    subtitle: activeCustomCount > 0
+                        ? '$activeCustomCount Community Rules ON'
+                        : 'Write & Toggle Custom Rules',
                     icon: Icons.tune,
                     accent: AppColors.activeCyan,
                     onTap: () async {
                       final updated = await Navigator.push<LudoRulesConfig>(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => CustomRulesStudioScreen(initialConfig: _activeRules),
+                          builder: (_) => CustomRulesStudioScreen(
+                            initialConfig: _effectiveRules(),
+                            communityRulesService: widget.communityRulesService,
+                          ),
                         ),
                       );
                       if (updated != null) setState(() => _activeRules = updated);

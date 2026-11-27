@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/remote_config_service.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_lobby_screen.dart';
+import 'services/community_rules_service.dart';
 import 'services/gemini_agent_service.dart';
 import 'services/local_progress_service.dart';
 import 'services/offline_p2p_service.dart';
@@ -25,6 +26,9 @@ Future<void> main() async {
   await localProgress.loadFromDevice();
   await localProgress.syncDeviceProgressToCloudIfNeeded();
 
+  final communityRulesService = CommunityRulesService();
+  await communityRulesService.initializeAndSync();
+
   final geminiService = GeminiAgentService();
   await geminiService.loadSavedSettings();
 
@@ -33,6 +37,7 @@ Future<void> main() async {
   runApp(LudoZaiApp(
     remoteConfig: remoteConfig,
     localProgress: localProgress,
+    communityRulesService: communityRulesService,
     geminiService: geminiService,
     p2pService: p2pService,
   ));
@@ -41,6 +46,7 @@ Future<void> main() async {
 class LudoZaiApp extends StatelessWidget {
   final RemoteConfigService remoteConfig;
   final LocalProgressService localProgress;
+  final CommunityRulesService communityRulesService;
   final GeminiAgentService geminiService;
   final OfflineP2PService p2pService;
 
@@ -48,6 +54,7 @@ class LudoZaiApp extends StatelessWidget {
     super.key,
     required this.remoteConfig,
     required this.localProgress,
+    required this.communityRulesService,
     required this.geminiService,
     required this.p2pService,
   });
@@ -63,6 +70,7 @@ class LudoZaiApp extends StatelessWidget {
       home: HomeLobbyScreen(
         remoteConfig: remoteConfig,
         localProgress: localProgress,
+        communityRulesService: communityRulesService,
         p2pService: p2pService,
         geminiService: geminiService,
       ),
