@@ -11,6 +11,14 @@ workflows:
           cd packages/ludo_rules
           dart pub get
           dart test
+      - name: Ensure Android Gradle Scaffold & Preserve Permissions Manifest
+        script: |
+          cd apps/mobile_flutter
+          if [ ! -f android/build.gradle ] && [ ! -f android/build.gradle.kts ]; then
+            cp android/app/src/main/AndroidManifest.xml /tmp/LudoZai_AndroidManifest.xml
+            flutter create --platforms=android --org com.ludozai --project-name ludo_zai .
+            cp /tmp/LudoZai_AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          fi
       - name: Build Obfuscated Release APK
         script: |
           cd apps/mobile_flutter

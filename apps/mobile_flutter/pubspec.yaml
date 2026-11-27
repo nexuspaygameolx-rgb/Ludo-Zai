@@ -15,6 +15,7 @@ dependencies:
   flutter_dotenv: ^5.1.0
   flutter_secure_storage: ^9.2.2
   nearby_connections: ^4.1.0
+  permission_handler: ^11.3.1
   web_socket_channel: ^3.0.1
   record: ^5.1.2
   just_audio: ^0.9.40

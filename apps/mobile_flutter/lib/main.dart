@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/remote_config_service.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_lobby_screen.dart';
+import 'services/app_permissions_service.dart';
 import 'services/community_rules_service.dart';
 import 'services/gemini_agent_service.dart';
 import 'services/local_progress_service.dart';
@@ -43,7 +44,7 @@ Future<void> main() async {
   ));
 }
 
-class LudoZaiApp extends StatelessWidget {
+class LudoZaiApp extends StatefulWidget {
   final RemoteConfigService remoteConfig;
   final LocalProgressService localProgress;
   final CommunityRulesService communityRulesService;
@@ -60,6 +61,19 @@ class LudoZaiApp extends StatelessWidget {
   });
 
   @override
+  State<LudoZaiApp> createState() => _LudoZaiAppState();
+}
+
+class _LudoZaiAppState extends State<LudoZaiApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppPermissionsService.requestAllStartupPermissions();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Ludo-Z! 3D Desi Kuti',
@@ -68,11 +82,11 @@ class LudoZaiApp extends StatelessWidget {
       theme: AppTheme.lightTheme(),
       darkTheme: AppTheme.darkTheme(),
       home: HomeLobbyScreen(
-        remoteConfig: remoteConfig,
-        localProgress: localProgress,
-        communityRulesService: communityRulesService,
-        p2pService: p2pService,
-        geminiService: geminiService,
+        remoteConfig: widget.remoteConfig,
+        localProgress: widget.localProgress,
+        communityRulesService: widget.communityRulesService,
+        p2pService: widget.p2pService,
+        geminiService: widget.geminiService,
       ),
     );
   }
