@@ -14,16 +14,17 @@ class RemoteConfigService extends ChangeNotifier {
   int adsterraRewardGems = 5;
   int adsterraChestSkipMinutes = 30;
 
-  // Dynamic CashMaal Config loaded from Admin Panel
+  // Exact Pricing: 100 PKR = 1,000 Coins | 100 PKR = 100 Gems | 1 Gem = 10 Coins | 30% Sell Fee
   bool cashmaalEnabled = true;
-  double coinsBuyRatePer1000 = 15.0;
-  double coinsSellRatePer1000 = 11.0;
-  double gemsBuyRatePer10 = 25.0;
-  double gemsSellRatePer10 = 18.0;
-  double trophiesSellRatePer100 = 20.0;
-  int minSellCoins = 10000;
+  double coinsBuyRatePer1000 = 100.0;
+  double gemsBuyRatePer100 = 100.0;
+  int gemsToCoinsRatio = 10;
+  double sellFeePercent = 30.0;
+  int minSellCoins = 1000;
   int minSellGems = 100;
-  int minSellTrophies = 500;
+
+  double get coinsSellNetPkrPer1000 => coinsBuyRatePer1000 * ((100.0 - sellFeePercent) / 100.0);
+  double get gemsSellNetPkrPer100 => gemsBuyRatePer100 * ((100.0 - sellFeePercent) / 100.0);
 
   Map<String, dynamic> defaultRulesJson = {};
 
@@ -47,19 +48,17 @@ class RemoteConfigService extends ChangeNotifier {
 
       final cm = data['cashmaal_public_config'] as Map<String, dynamic>? ?? {};
       cashmaalEnabled = cm['enabled'] as bool? ?? true;
-      coinsBuyRatePer1000 = (cm['coins_buy_rate_pkr_per_1000'] as num?)?.toDouble() ?? 15.0;
-      coinsSellRatePer1000 = (cm['coins_sell_rate_pkr_per_1000'] as num?)?.toDouble() ?? 11.0;
-      gemsBuyRatePer10 = (cm['gems_buy_rate_pkr_per_10'] as num?)?.toDouble() ?? 25.0;
-      gemsSellRatePer10 = (cm['gems_sell_rate_pkr_per_10'] as num?)?.toDouble() ?? 18.0;
-      trophiesSellRatePer100 = (cm['trophies_sell_rate_pkr_per_100'] as num?)?.toDouble() ?? 20.0;
-      minSellCoins = (cm['min_sell_coins'] as num?)?.toInt() ?? 10000;
+      coinsBuyRatePer1000 = (cm['coins_buy_rate_pkr_per_1000'] as num?)?.toDouble() ?? 100.0;
+      gemsBuyRatePer100 = (cm['gems_buy_rate_pkr_per_100'] as num?)?.toDouble() ?? 100.0;
+      gemsToCoinsRatio = (cm['gems_to_coins_ratio'] as num?)?.toInt() ?? 10;
+      sellFeePercent = (cm['sell_fee_percent'] as num?)?.toDouble() ?? 30.0;
+      minSellCoins = (cm['min_sell_coins'] as num?)?.toInt() ?? 1000;
       minSellGems = (cm['min_sell_gems'] as num?)?.toInt() ?? 100;
-      minSellTrophies = (cm['min_sell_trophies'] as num?)?.toInt() ?? 500;
 
       defaultRulesJson = data['default_rules'] as Map<String, dynamic>? ?? {};
       notifyListeners();
     } catch (_) {
-      // Fallback to cached defaults when offline
+      // Offline / guest fallback
     }
   }
 }
