@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
@@ -16,10 +17,10 @@ const db = supabaseUrl && serviceKey
   : null;
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "Ludo-Z! Render Backend", timestamp: new Date().toISOString() });
+  res.json({ ok: true, service: "Ludo-Z! Docker Backend", timestamp: new Date().toISOString() });
 });
 
-// Public remote config endpoint for Flutter APK startup
+// 1. Public remote config endpoint for Flutter APK startup
 app.get("/api/public-config", async (_req, res) => {
   try {
     if (!db) return res.status(503).json({ error: "Database not configured" });
@@ -31,7 +32,19 @@ app.get("/api/public-config", async (_req, res) => {
   }
 });
 
-// Automated CashMaal Buy Order Creation (100 PKR = 1000 Coins, 100 PKR = 100 Gems)
+// 2. Cryptographically Secure Server Dice Roll (Anti-Hack RNG)
+app.post("/api/match/roll-dice", async (req, res) => {
+  try {
+    const { count = 2 } = req.body;
+    const safeCount = count === 1 ? 1 : 2;
+    const values = Array.from({ length: safeCount }, () => crypto.randomInt(1, 7));
+    res.json({ values, used: Array(safeCount).fill(false), timestamp: Date.now() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 3. Automated CashMaal Buy Order Creation (100 PKR = 1000 Coins, 100 PKR = 100 Gems)
 app.post("/api/cashmaal/buy", async (req, res) => {
   try {
     if (!db) throw new Error("Server DB not configured");
@@ -81,7 +94,7 @@ app.post("/api/cashmaal/buy", async (req, res) => {
   }
 });
 
-// Automated CashMaal Sell & Direct Account Withdrawal (30% Admin Fee -> 70% Net Payout)
+// 4. Automated CashMaal Sell & Direct Account Withdrawal (30% Admin Fee -> 70% Net Payout)
 app.post("/api/cashmaal/sell", async (req, res) => {
   try {
     if (!db) throw new Error("Server DB not configured");
@@ -95,7 +108,7 @@ app.post("/api/cashmaal/sell", async (req, res) => {
 
     const amount = Number(asset_amount);
     const feePercent = Number(cm.sell_fee_percent ?? 30);
-    const payoutMultiplier = (100 - feePercent) / 100; // 0.70 when 30% fee
+    const payoutMultiplier = (100 - feePercent) / 100;
 
     let grossPkr = 0;
     let netPkr = 0;
@@ -148,13 +161,12 @@ app.post("/api/cashmaal/sell", async (req, res) => {
         rate_applied: rateApplied,
         cashmaal_account: String(cashmaal_account).trim(),
         status: "processing",
-        audit_notes: `30% sell fee applied (Gross: ${grossPkr} PKR, Net: ${netPkr} PKR)`,
+        audit_notes: `${feePercent}% sell fee applied (Gross: ${grossPkr} PKR, Net: ${netPkr} PKR)`,
       })
       .select()
       .single();
     if (ordErr) throw ordErr;
 
-    // Trigger automated CashMaal Payout API
     const payoutUrl = process.env.CASHMAAL_PAYOUT_API_URL || "";
     const payoutApiKey = process.env.CASHMAAL_PAYOUT_API_KEY || "";
     const merchantId = process.env.CASHMAAL_MERCHANT_ID || "";
@@ -191,7 +203,6 @@ app.post("/api/cashmaal/sell", async (req, res) => {
           message: `${netPkr} PKR aapke CashMaal account (${cashmaal_account}) mein auto-transfer kar diye gaye hain!`,
         });
       } else {
-        // Automatic escrow refund if CashMaal rejects payout
         await db.rpc("apply_wallet_delta", {
           p_user_id: user_id,
           p_coins_delta: asset_type === "coins" ? amount : 0,
@@ -220,7 +231,7 @@ app.post("/api/cashmaal/sell", async (req, res) => {
   }
 });
 
-// CashMaal IPN Webhook for Instant Buy Credit
+// 5. CashMaal IPN Webhook
 app.post("/api/cashmaal/ipn", async (req, res) => {
   try {
     if (!db) throw new Error("Server DB not configured");
@@ -254,5 +265,5 @@ app.post("/api/cashmaal/ipn", async (req, res) => {
 
 const port = Number(process.env.PORT || 10000);
 app.listen(port, () => {
-  console.log(`Ludo-Z! Render backend running on port ${port}`);
+  console.log(`Ludo-Z! Docker backend running on port ${port}`);
 });

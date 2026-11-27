@@ -58,7 +58,7 @@ class LudoRuleEngine {
     }
     if (unusedIndices.isEmpty) return moves;
 
-    // 1. Check Ghar Wali Ulti Kuti (6 + X) when Kuti Mode is ON, both dice unused,
+    // 1. Ghar Wali Ulti Kuti (6 + X) when Kuti Mode is ON, both dice unused,
     // one die is 6, and activePlayer has finished at least 1 token.
     if (config.kutiMode &&
         unusedIndices.length == 2 &&
@@ -68,16 +68,12 @@ class LudoRuleEngine {
       final otherIdx = sixIdx == 0 ? 1 : 0;
       final neededDistance = dice.values[otherIdx];
 
-      // Find any opponent token standing inside its own home column at exact distance == neededDistance
       for (final opp in allPlayers) {
         if (areTeammates(activePlayer.color, opp.color, config)) continue;
         for (final oppToken in opp.tokens) {
           if (oppToken.zone == TokenZone.homeColumn &&
               oppToken.homeColumnColor == opp.color &&
               oppToken.distanceToFinish == neededDistance) {
-            // Which attacker token can execute this Kuti?
-            // Any non-finished token of activePlayer (yard token opens on 6 and strikes X,
-            // or active main-track token executes 6+X Kuti).
             for (final myToken in activePlayer.tokens) {
               if (myToken.isFinished) continue;
               moves.add(LegalMove(
@@ -146,7 +142,6 @@ class LudoRuleEngine {
     required List<int> diceIndices,
     required LudoRulesConfig config,
   }) {
-    // Yard exit check
     if (token.isInYard) {
       final canOpen = (config.openRule == TokenOpenRule.sixOnly && steps == 6) ||
           (config.openRule == TokenOpenRule.oneOrSix && (steps == 6 || steps == 1));
@@ -160,10 +155,7 @@ class LudoRuleEngine {
       );
     }
 
-    // Inside Home Column
     if (token.isInHomeColumn) {
-      // If token is inside an opponent's home column right after performing a Kuti,
-      // its next move exits that home column in reverse onto the main track.
       if (token.homeColumnColor != null && token.homeColumnColor != token.owner) {
         return LegalMove(
           tokenId: token.id,
@@ -175,7 +167,7 @@ class LudoRuleEngine {
       }
 
       final nextDepth = token.homeColumnDepth + steps;
-      if (nextDepth > homeColumnLength + 1) return null; // Exact roll required to finish
+      if (nextDepth > homeColumnLength + 1) return null;
       if (nextDepth == homeColumnLength + 1) {
         return LegalMove(
           tokenId: token.id,
@@ -194,9 +186,7 @@ class LudoRuleEngine {
       );
     }
 
-    // Main Track Movement
     if (token.isKuti) {
-      // Reverse (anti-clockwise) movement!
       final gate = homeGateIndex[token.owner]!;
       final distToGateReverse = (token.mainTrackIndex - gate + mainTrackLength) % mainTrackLength;
       if (token.progressSteps >= 26 && steps > distToGateReverse) {
@@ -227,12 +217,9 @@ class LudoRuleEngine {
         description: 'Reverse Kuti ${token.id} moves $steps anti-clockwise',
       );
     } else {
-      // Standard clockwise movement
       final nextProgress = token.progressSteps + steps;
       if (nextProgress > 50) {
-        // Attempting to enter own home column
         if (config.katiBaghairGharBand && !activePlayer.hasAtLeastOneKill) {
-          // Wrap around for an extra lap if no kill yet
           return LegalMove(
             tokenId: token.id,
             moveType: MoveType.normalAdvance,
@@ -241,7 +228,7 @@ class LudoRuleEngine {
             description: 'Extra lap (Kati Baghair Ghar Band active)',
           );
         }
-        final homeDepth = nextProgress - 50; // 1..6
+        final homeDepth = nextProgress - 50;
         if (homeDepth > homeColumnLength + 1) return null;
         if (homeDepth == homeColumnLength + 1) {
           return LegalMove(
@@ -261,12 +248,10 @@ class LudoRuleEngine {
         );
       }
 
-      // Check Jota blocking / Tiggi collision on target mainTrackIndex
       final targetTile = (token.mainTrackIndex + steps) % mainTrackLength;
       if (!isSafeTile(targetTile, config)) {
         final tileCheck = _canLandOnTile(
           attackerColor: token.owner,
-          attackerTile: token.mainTrackIndex,
           targetTile: targetTile,
           allPlayers: allPlayers,
           config: config,
@@ -284,17 +269,14 @@ class LudoRuleEngine {
     }
   }
 
-  /// Checks whether a normal non-Kuti token can land on [targetTile] given Jota/Tiggi stacks.
   static bool _canLandOnTile({
     required PlayerColor attackerColor,
-    required int attackerTile,
     required int targetTile,
     required List<PlayerState> allPlayers,
     required LudoRulesConfig config,
   }) {
     if (!config.jotaEnabled) return true;
 
-    // Count attacker's own tokens already on targetTile (forming a Jota upon arrival)
     final ownTokensOnTarget = allPlayers
         .firstWhere((p) => p.color == attackerColor)
         .tokens
@@ -308,10 +290,8 @@ class LudoRuleEngine {
           .where((t) => t.zone == TokenZone.mainTrack && t.mainTrackIndex == targetTile)
           .toList();
       if (oppTokens.length == 2) {
-        // Opponent Jota: requires incomingStackSize >= 2 (attacker forming/moving a Jota)
         if (incomingStackSize < 2) return false;
       } else if (oppTokens.length >= 3) {
-        // Opponent Tiggi (3+ tokens)
         if (config.tiggiRule == TiggiVsJotaRule.tiggiShield) {
           return false;
         }
@@ -321,7 +301,8 @@ class LudoRuleEngine {
     return true;
   }
 
-  /// Executes a validated [LegalMove] and returns the updated state of all players.
+  /// Executes a validated [LegalMove], evaluates any user-created [CustomRuleDefinition]s,
+  /// and returns the updated state of all players.
   static MoveExecutionResult executeMove({
     required PlayerState activePlayer,
     required List<PlayerState> allPlayers,
@@ -330,7 +311,7 @@ class LudoRuleEngine {
   }) {
     final players = allPlayers.map((p) => p.copyWith(tokens: List<TokenState>.from(p.tokens))).toList();
     final meIdx = players.indexWhere((p) => p.playerId == activePlayer.playerId);
-    var me = players[meIdx];
+    final me = players[meIdx];
     final tokenIdx = me.tokens.indexWhere((t) => t.id == move.tokenId);
     var movingToken = me.tokens[tokenIdx];
 
@@ -342,7 +323,6 @@ class LudoRuleEngine {
     String summary = move.description;
 
     if (move.moveType == MoveType.gharWaliUltiKuti) {
-      // Capture opponent token inside their home column & flip movingToken into permanent Ulti Kuti!
       final oppIdx = players.indexWhere((p) => p.color == move.targetHomeColor);
       final opp = players[oppIdx];
       final oppTokens = List<TokenState>.from(opp.tokens);
@@ -379,15 +359,12 @@ class LudoRuleEngine {
         isKuti: false,
       );
     } else if (move.moveType == MoveType.reverseKutiAdvance) {
-      // Moving counter-clockwise (anti-clockwise)
       int currentTile;
       int stepsRemaining = move.totalSteps;
       if (movingToken.isInHomeColumn && movingToken.homeColumnColor != null) {
-        // Stepping out of opponent's home column onto the gate tile first
         final exitGate = homeGateIndex[movingToken.homeColumnColor!]!;
         currentTile = exitGate;
         stepsRemaining -= 1;
-        // Sweep check on exit gate
         _applyKutiSweepAtTile(
           tile: currentTile,
           attackerColor: me.color,
@@ -434,12 +411,10 @@ class LudoRuleEngine {
         progressSteps: newProg,
       );
 
-      // Standard landing capture check
       if (!isSafeTile(newTile, config)) {
         _applyNormalLandingCapture(
           tile: newTile,
           attackerColor: me.color,
-          movingTokenId: movingToken.id,
           players: players,
           capturedIds: capturedIds,
           config: config,
@@ -470,7 +445,32 @@ class LudoRuleEngine {
       bonusTurn = true;
     }
 
-    // Save updated moving token
+    // Evaluate user-defined CustomRules (Trigger -> Condition -> Action)
+    for (final rule in config.customRules) {
+      if (!rule.enabled) continue;
+      final triggerMatched =
+          (rule.trigger == 'on_capture' && capturedIds.isNotEmpty) ||
+          (rule.trigger == 'on_home_entry' && move.moveType == MoveType.homeColumnAdvance) ||
+          (rule.trigger == 'on_dice_roll' &&
+              (rule.conditionValue == null || move.totalSteps == rule.conditionValue));
+      if (!triggerMatched) continue;
+
+      final conditionMatched =
+          (rule.condition == 'has_finished_token' && players[meIdx].hasAtLeastOneFinished) ||
+          (rule.condition == 'is_kuti' && movingToken.isKuti) ||
+          (rule.condition == 'dice_sum_exact' &&
+              (rule.conditionValue == null || move.totalSteps == rule.conditionValue));
+      if (!conditionMatched) continue;
+
+      if (rule.action == 'grant_extra_turn') {
+        bonusTurn = true;
+        summary = '${rule.name}: Extra Turn activated!';
+      } else if (rule.action == 'flip_to_kuti' && movingToken.zone == TokenZone.mainTrack) {
+        movingToken = movingToken.copyWith(isKuti: true);
+        summary = '${rule.name}: Token flipped into Reverse Kuti!';
+      }
+    }
+
     final updatedMyTokens = List<TokenState>.from(players[meIdx].tokens);
     updatedMyTokens[tokenIdx] = movingToken;
     players[meIdx] = players[meIdx].copyWith(
@@ -479,10 +479,7 @@ class LudoRuleEngine {
       kutiCount: players[meIdx].kutiCount + (triggeredKuti ? 1 : 0),
     );
 
-    // Delayed Remaining Kill Check on previousTile (Tiggi rule):
-    // If activePlayer had 3 tokens (Tiggi) sharing previousTile with an opponent Jota,
-    // and just moved 1 token or 1 Jota out, the opponent's Jota immediately captures
-    // the remaining token(s) left behind on previousTile!
+    // Delayed Remaining Kill Check on previousTile (Tiggi rule)
     if (previousTile != -1 &&
         !isSafeTile(previousTile, config) &&
         config.tiggiRule == TiggiVsJotaRule.delayedRemainingKill) {
@@ -516,7 +513,6 @@ class LudoRuleEngine {
       }
     }
 
-    // Check Win Condition (single player or 2v2 team)
     PlayerColor? winner;
     if (config.teamMode2v2) {
       final teamFinished = players
@@ -577,7 +573,6 @@ class LudoRuleEngine {
   static void _applyNormalLandingCapture({
     required int tile,
     required PlayerColor attackerColor,
-    required String movingTokenId,
     required List<PlayerState> players,
     required List<String> capturedIds,
     required LudoRulesConfig config,
@@ -595,15 +590,12 @@ class LudoRuleEngine {
           .toList();
       if (oppOnTile.isEmpty) continue;
 
-      // Delayed Remaining Kill: if opponent has 3 tokens (Tiggi) and attacker lands with a Jota (2),
-      // hold fire until opponent moves out!
       if (oppOnTile.length == 3 &&
           attackerStackCount >= 2 &&
           config.tiggiRule == TiggiVsJotaRule.delayedRemainingKill) {
         continue;
       }
 
-      // Otherwise capture eligible opponent tokens (including stationary Kuti if kutiVulnerable)
       final tokens = List<TokenState>.from(opp.tokens);
       bool changed = false;
       for (int t = 0; t < tokens.length; t++) {
